@@ -324,7 +324,8 @@ func TestApplyChmodNonexistent(t *testing.T) {
 func TestApplySkipModeNoChmod(t *testing.T) {
 	skipIfNotRoot(t)
 	f := filepath.Join(t.TempDir(), "test")
-	os.WriteFile(f, []byte(""), 0o777)
+	os.WriteFile(f, []byte(""), 0o644)
+	os.Chmod(f, 0o777) // explicit chmod — WriteFile is subject to umask
 
 	ok, _ := ApplyActions([]PermAction{makeAction(f, -1, "", "")}, false)
 	if !ok {
@@ -435,7 +436,8 @@ func TestApplyPartialFailure(t *testing.T) {
 func TestApplyDryRunNoChanges(t *testing.T) {
 	skipIfNotRoot(t)
 	f := filepath.Join(t.TempDir(), "test")
-	os.WriteFile(f, []byte(""), 0o777)
+	os.WriteFile(f, []byte(""), 0o644)
+	os.Chmod(f, 0o777) // explicit chmod — WriteFile is subject to umask
 
 	ok, _ := ApplyActions([]PermAction{makeAction(f, 0o644, "root", "root")}, true)
 	if !ok {
