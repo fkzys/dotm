@@ -14,11 +14,12 @@ import (
 // FuncMap returns the custom template functions available in all templates.
 func FuncMap() template.FuncMap {
 	return template.FuncMap{
-		"output":   fnOutput,
+		"output":  fnOutput,
 		"fromYaml": fnFromYaml,
 		"joinPath": filepath.Join,
-		"hasKey":   fnHasKey,
-		"replace":  fnReplace,
+		"hasKey":  fnHasKey,
+		"replace": fnReplace,
+		"default": fnDefault,
 	}
 }
 
@@ -74,4 +75,42 @@ func fnHasKey(m map[string]any, key string) bool {
 //	{{ replace "$HOME" .homeDir $path }}
 func fnReplace(old, new, s string) string {
 	return strings.ReplaceAll(s, old, new)
+}
+
+// default returns def if value is empty, otherwise value.
+//
+// Usage in templates:
+//
+//	{{ $lang := index $s "qwen" "outputLanguage" | default "english" }}
+func fnDefault(def, value any) any {
+	if value == nil {
+		return def
+	}
+	switch v := value.(type) {
+	case string:
+		if v == "" {
+			return def
+		}
+	case bool:
+		if !v {
+			return def
+		}
+	case int, int8, int16, int32, int64:
+		if v == 0 {
+			return def
+		}
+	case float32, float64:
+		if v == 0 {
+			return def
+		}
+	case []any:
+		if len(v) == 0 {
+			return def
+		}
+	case map[string]any:
+		if len(v) == 0 {
+			return def
+		}
+	}
+	return value
 }

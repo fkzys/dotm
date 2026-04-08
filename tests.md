@@ -48,7 +48,7 @@ All tests use Go's standard `testing` package with `t.TempDir()` for filesystem 
 
 **`prompt`** — `Resolve` tests inject `strings.NewReader` as stdin and `bytes.Buffer` as stdout, simulating interactive input without a terminal. Multiple prompts are verified to execute in sorted key order.
 
-**`tmpl`** — template function tests render templates with known data and compare output. `output` tests use `echo` as a portable command. `fromYaml` tests verify both valid parsing and error handling for malformed YAML.
+**`tmpl`** — template function tests render templates with known data and compare output. `output` tests use `echo` as a portable command. `fromYaml` tests verify both valid parsing and error handling for malformed YAML. `default` tests cover nil, empty string, zero int, false, empty slice, empty map, non-empty slice, and chained index patterns with secrets-style nested maps.
 
 ## Test environment
 
