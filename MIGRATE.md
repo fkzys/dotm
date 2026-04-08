@@ -51,6 +51,7 @@ dotm provides these custom functions (all compatible with chezmoi usage):
 | `joinPath` | `joinPath "a" "b"` | Same as chezmoi |
 | `hasKey` | `hasKey $map "key"` | Same as chezmoi |
 | `replace` | `replace "old" "new" $s` | Same argument order as chezmoi |
+| `default` | `default "fallback" $value` | Return fallback if value is empty/nil |
 
 Standard Go template functions (`index`, `eq`, `if`, `range`, `printf`, etc.) work identically.
 

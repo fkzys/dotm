@@ -182,6 +182,7 @@ Prompt values are available by name: `{{ .use_nvidia }}`, `{{ .git_email }}`.
 | `joinPath "a" "b"` | `filepath.Join` |
 | `hasKey $map "key"` | Check if map contains key |
 | `replace "old" "new" $s` | Replace all occurrences |
+| `default "fallback" $value` | Return fallback if value is empty/nil |
 
 ### Example: secrets via sops
 

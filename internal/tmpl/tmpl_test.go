@@ -193,3 +193,127 @@ func TestFuncOutputNonexistentCommand(t *testing.T) {
 		t.Fatal("expected error for nonexistent command")
 	}
 }
+
+// ─── default ─────────────────────────────────────────────────────────────────
+
+func TestFuncDefaultWithValue(t *testing.T) {
+	data := map[string]any{"key": "hello"}
+	out, err := Render(`{{ .key | default "fallback" }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "hello" {
+		t.Errorf("got %q, want 'hello'", out)
+	}
+}
+
+func TestFuncDefaultWithNil(t *testing.T) {
+	data := map[string]any{"key": nil}
+	out, err := Render(`{{ .key | default "fallback" }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "fallback" {
+		t.Errorf("got %q, want 'fallback'", out)
+	}
+}
+
+func TestFuncDefaultWithEmptyString(t *testing.T) {
+	data := map[string]any{"key": ""}
+	out, err := Render(`{{ .key | default "fallback" }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "fallback" {
+		t.Errorf("got %q, want 'fallback'", out)
+	}
+}
+
+func TestFuncDefaultWithZeroInt(t *testing.T) {
+	data := map[string]any{"key": 0}
+	out, err := Render(`{{ .key | default 42 }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "42" {
+		t.Errorf("got %q, want '42'", out)
+	}
+}
+
+func TestFuncDefaultWithEmptySlice(t *testing.T) {
+	data := map[string]any{"key": []any{}}
+	out, err := Render(`{{ .key | default "fallback" }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "fallback" {
+		t.Errorf("got %q, want 'fallback'", out)
+	}
+}
+
+func TestFuncDefaultWithEmptyMap(t *testing.T) {
+	data := map[string]any{"key": map[string]any{}}
+	out, err := Render(`{{ .key | default "fallback" }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "fallback" {
+		t.Errorf("got %q, want 'fallback'", out)
+	}
+}
+
+func TestFuncDefaultWithFalse(t *testing.T) {
+	data := map[string]any{"key": false}
+	out, err := Render(`{{ .key | default true }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "true" {
+		t.Errorf("got %q, want 'true'", out)
+	}
+}
+
+func TestFuncDefaultWithNonEmptySlice(t *testing.T) {
+	data := map[string]any{"key": []any{"item"}}
+	out, err := Render(`{{ .key | default "fallback" }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "[item]" {
+		t.Errorf("got %q, want '[item]'", out)
+	}
+}
+
+func TestFuncDefaultChainedIndex(t *testing.T) {
+	// Simulates the real-world pattern: index $s "app" "setting" | default "fallback"
+	data := map[string]any{
+		"s": map[string]any{
+			"app": map[string]any{
+				"setting": "value",
+			},
+		},
+	}
+	out, err := Render(`{{ index .s "app" "setting" | default "fallback" }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "value" {
+		t.Errorf("got %q, want 'value'", out)
+	}
+}
+
+func TestFuncDefaultChainedIndexMissing(t *testing.T) {
+	// First level exists but second key is missing — index returns nil, default provides fallback.
+	data := map[string]any{
+		"s": map[string]any{
+			"app": map[string]any{},
+		},
+	}
+	out, err := Render(`{{ index .s "app" "setting" | default "fallback" }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "fallback" {
+		t.Errorf("got %q, want 'fallback'", out)
+	}
+}
