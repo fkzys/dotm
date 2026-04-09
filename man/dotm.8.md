@@ -239,6 +239,13 @@ etc/security/          0700   root   root
 Trailing **/** matches directories only. No trailing **/** matches files
 only. **-** means don't change that attribute. Last matching rule wins.
 
+If no **perms** file exists, all deployed files receive default **0644**
+permissions and directories receive **0755** after write. Files are
+initially written with **0600** to prevent a window where sensitive
+files are world-readable, then lifted to the defaults once the apply
+completes. Add a **perms** file to override these defaults for specific
+paths.
+
 ## Package and service management
 
 Packages and services are managed via declarative **managers**. A manager

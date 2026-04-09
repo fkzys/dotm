@@ -84,7 +84,7 @@ func Load(configDir string) (*PkgManifest, error) {
 
 	var raw map[string]any
 	if _, err := toml.DecodeFile(path, &raw); err != nil {
-		return nil, fmt.Errorf("parse state %s: %w", path, err)
+		return m, fmt.Errorf("parse state %s: %w", path, err)
 	}
 
 	// Extract pkg_manifest section if present.
