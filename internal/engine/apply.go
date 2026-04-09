@@ -375,6 +375,28 @@ func (e *Engine) applyPerms(writtenPaths []string) error {
 	content, err := os.ReadFile(permsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			// No perms file — apply default permissions to all written paths.
+			// Files were initially written with 0o600 for security;
+			// this lifts them to the previous defaults (0o644 for files,
+			// 0o755 for directories).
+			for _, p := range writtenPaths {
+				if !e.dryRun {
+					info, statErr := os.Stat(p)
+					if statErr != nil {
+						fmt.Fprintf(os.Stderr, "WARN: cannot stat %s: %v\n", p, statErr)
+						continue
+					}
+					var mode os.FileMode
+					if info.IsDir() {
+						mode = 0o755
+					} else {
+						mode = 0o644
+					}
+					if err := os.Chmod(p, mode); err != nil {
+						fmt.Fprintf(os.Stderr, "WARN: chmod %s: %v\n", p, err)
+					}
+				}
+			}
 			return nil
 		}
 		return err
@@ -560,14 +582,13 @@ func isValidShell(shell string) bool {
 		return true
 	}
 
-	// If it's an absolute path, check if it exists and is executable.
+	// If it's an absolute path, check if it exists, is a regular file, and is executable.
 	if filepath.IsAbs(shell) {
 		info, err := os.Stat(shell)
 		if err != nil {
 			return false
 		}
-		// Check if it's a regular file.
-		return info.Mode().IsRegular()
+		return info.Mode().IsRegular() && info.Mode().Perm()&0111 != 0
 	}
 
 	return false

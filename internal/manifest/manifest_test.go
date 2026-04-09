@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -88,5 +89,36 @@ func TestStateFile(t *testing.T) {
 				t.Errorf("expected absolute path, got %s", path)
 			}
 		})
+	}
+}
+
+func TestLoadInvalidTOML(t *testing.T) {
+	dir := t.TempDir()
+	testStateDir = dir
+	t.Cleanup(func() { testStateDir = "" })
+
+	// Write invalid TOML to the state file path.
+	path, err := stateFile(dir)
+	if err != nil {
+		t.Fatalf("stateFile: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("this is {{{ invalid toml }}}"), 0o644); err != nil {
+		t.Fatalf("write invalid toml: %v", err)
+	}
+
+	m, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid TOML, got nil")
+	}
+
+	// Must return a non-nil empty manifest, not nil.
+	if m == nil {
+		t.Fatal("expected non-nil manifest for invalid TOML, got nil")
+	}
+	if len(m.Packages) != 0 {
+		t.Errorf("expected 0 packages, got %d", len(m.Packages))
+	}
+	if len(m.Services) != 0 {
+		t.Errorf("expected 0 services, got %d", len(m.Services))
 	}
 }

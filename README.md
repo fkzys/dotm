@@ -266,6 +266,8 @@ root/**                0600   root   root
 
 Glob patterns support `*`, `?`, `**`. Rules are evaluated top-to-bottom; last match wins. Directory rules (trailing `/`) only match directories; file rules only match files.
 
+If no `perms` file exists, all deployed files receive default `0o644` permissions and directories receive `0o755` after write. Files are initially written with `0o600` to prevent a window where sensitive files are world-readable, then lifted to the defaults once the apply completes. Add a `perms` file to override these defaults for specific paths.
+
 This is the primary reason dotm exists as a separate tool — managing `/etc` permissions correctly matters, and encoding `0640 root:polkitd` in a filename is not a serious approach.
 
 ## Scripts
