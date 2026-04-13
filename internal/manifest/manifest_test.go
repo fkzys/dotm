@@ -438,3 +438,49 @@ symlinks = ["link"]
 		t.Error("expected git package in state file")
 	}
 }
+
+// ─── Save — normal path ─────────────────────────────────────────────────────
+
+func TestSaveNormalPath(t *testing.T) {
+	dir := t.TempDir()
+	testStateDir = dir
+	t.Cleanup(func() { testStateDir = "" })
+
+	m := &PkgManifest{
+		Packages: []PackageEntry{{Name: "test", Manager: "mock"}},
+	}
+	if err := Save(dir, m); err != nil {
+		t.Fatalf("Save should succeed: %v", err)
+	}
+}
+
+func TestStateDirFallback(t *testing.T) {
+	// Test stateDir with testStateDir unset (uses real home dir).
+	oldTestStateDir := testStateDir
+	testStateDir = ""
+	defer func() { testStateDir = oldTestStateDir }()
+
+	path, err := stateDir()
+	if err != nil {
+		t.Logf("stateDir error (acceptable in restricted env): %v", err)
+	} else if path == "" {
+		t.Error("expected non-empty path from stateDir")
+	}
+}
+
+func TestStateFileAbsolutePath(t *testing.T) {
+	dir := t.TempDir()
+	testStateDir = dir
+	t.Cleanup(func() { testStateDir = "" })
+
+	path, err := stateFile("/absolute/config")
+	if err != nil {
+		t.Fatalf("stateFile: %v", err)
+	}
+	if !filepath.IsAbs(path) {
+		t.Errorf("expected absolute path, got %s", path)
+	}
+	if filepath.Dir(path) != dir {
+		t.Errorf("path should be in testStateDir, got dir=%s", filepath.Dir(path))
+	}
+}
