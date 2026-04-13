@@ -483,3 +483,325 @@ func TestExecScriptEmptyContent(t *testing.T) {
 		t.Fatalf("execScript empty: %v", err)
 	}
 }
+
+// ─── showDiff ───────────────────────────────────────────────────────────────
+
+func TestShowDiffNilOld(t *testing.T) {
+	// nil old content should be treated as empty.
+	err := showDiff("test", "test", nil, []byte("new content"))
+	// diff exits 1 when files differ — we treat this as success.
+	if err != nil {
+		t.Fatalf("showDiff with nil old: %v", err)
+	}
+}
+
+func TestShowDiffNilBoth(t *testing.T) {
+	// Both nil — files are identical (both empty).
+	err := showDiff("test", "test", nil, nil)
+	if err != nil {
+		t.Fatalf("showDiff with both nil: %v", err)
+	}
+}
+
+func TestShowDiffIdentical(t *testing.T) {
+	// Identical content — diff exits 0, no output.
+	content := []byte("same content")
+	err := showDiff("test", "test", content, content)
+	if err != nil {
+		t.Fatalf("showDiff with identical: %v", err)
+	}
+}
+
+// ─── applyPerms — error paths ───────────────────────────────────────────────
+
+func TestApplyPermsInvalidPermsFile(t *testing.T) {
+	sourceDir := t.TempDir()
+	destDir := t.TempDir()
+
+	// Create dotm.toml.
+	cfgContent := `dest = "` + destDir + `"`
+	os.WriteFile(filepath.Join(sourceDir, "dotm.toml"), []byte(cfgContent), 0o644)
+
+	// Create files/ with a test file.
+	filesDir := filepath.Join(sourceDir, "files")
+	os.MkdirAll(filepath.Join(filesDir, ".config"), 0o755)
+	os.WriteFile(filepath.Join(filesDir, ".config", "test.conf"), []byte("content"), 0o644)
+
+	// Create invalid perms file.
+	os.WriteFile(filepath.Join(sourceDir, "perms"), []byte("invalid perms content"), 0o644)
+
+	cfg, err := config.Load(filepath.Join(sourceDir, "dotm.toml"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	state := &prompt.State{
+		Data:         make(map[string]any),
+		ScriptHashes: make(map[string]string),
+	}
+
+	eng, err := New(cfg, state, sourceDir, false)
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	// Apply should fail due to invalid perms file.
+	err = eng.Apply(ScopeFiles)
+	if err == nil {
+		t.Fatal("expected error for invalid perms file")
+	}
+	if !strings.Contains(err.Error(), "perms") {
+		t.Errorf("error = %q, should mention perms", err)
+	}
+}
+
+func TestApplyPermsDryRunWithPermsFile(t *testing.T) {
+	sourceDir := t.TempDir()
+	destDir := t.TempDir()
+
+	// Create dotm.toml.
+	cfgContent := `dest = "` + destDir + `"`
+	os.WriteFile(filepath.Join(sourceDir, "dotm.toml"), []byte(cfgContent), 0o644)
+
+	// Create files/ with a test file.
+	filesDir := filepath.Join(sourceDir, "files")
+	os.MkdirAll(filepath.Join(filesDir, ".config"), 0o755)
+	os.WriteFile(filepath.Join(filesDir, ".config", "test.conf"), []byte("content"), 0o644)
+
+	// Create perms file.
+	permsContent := `.config/** 0600 - -` + "\n"
+	os.WriteFile(filepath.Join(sourceDir, "perms"), []byte(permsContent), 0o644)
+
+	cfg, err := config.Load(filepath.Join(sourceDir, "dotm.toml"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	state := &prompt.State{
+		Data:         make(map[string]any),
+		ScriptHashes: make(map[string]string),
+	}
+
+	eng, err := New(cfg, state, sourceDir, true) // dryRun = true
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	// Dry run should succeed without writing anything.
+	err = eng.Apply(ScopeFiles)
+	if err != nil {
+		t.Fatalf("apply dry run: %v", err)
+	}
+
+	// File should not be created.
+	destPath := filepath.Join(destDir, ".config", "test.conf")
+	if _, err := os.Stat(destPath); err == nil {
+		t.Error("dry run should not create files")
+	}
+}
+
+// ─── walkAndWrite — skip identical content ─────────────────────────────────
+
+func TestWalkAndWriteSkipIdentical(t *testing.T) {
+	sourceDir := t.TempDir()
+	destDir := t.TempDir()
+
+	// Create files/ with a test file.
+	filesDir := filepath.Join(sourceDir, "files", ".config")
+	os.MkdirAll(filesDir, 0o755)
+	os.WriteFile(filepath.Join(filesDir, "test.conf"), []byte("same content"), 0o644)
+
+	// Create identical file in dest.
+	destPath := filepath.Join(destDir, ".config", "test.conf")
+	os.MkdirAll(filepath.Dir(destPath), 0o755)
+	os.WriteFile(destPath, []byte("same content"), 0o644)
+
+	cfg := &config.Config{
+		Dest:  destDir,
+		Shell: "bash",
+	}
+	state := &prompt.State{
+		Data:         make(map[string]any),
+		ScriptHashes: make(map[string]string),
+	}
+
+	eng, err := New(cfg, state, sourceDir, false)
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	written, err := eng.walkAndWrite()
+	if err != nil {
+		t.Fatalf("walkAndWrite: %v", err)
+	}
+
+	// File and directory should be in written list (for manifest tracking).
+	// walkAndWrite returns both dirs and files.
+	found := make(map[string]bool)
+	for _, p := range written {
+		found[p] = true
+	}
+	if !found[destPath] {
+		t.Errorf("expected %s in written paths", destPath)
+	}
+}
+
+// ─── runScripts — error path: missing script file ───────────────────────────
+
+func TestRunScriptsMissingFile(t *testing.T) {
+	sourceDir := t.TempDir()
+
+	bashPath := "/bin/bash"
+	if _, err := os.Stat(bashPath); err != nil {
+		bashPath = "/usr/bin/bash"
+	}
+	if _, err := os.Stat(bashPath); err != nil {
+		t.Skip("bash not found")
+	}
+
+	cfg := &config.Config{
+		Dest:  "/tmp",
+		Shell: bashPath,
+		Scripts: []config.ScriptConfig{
+			{Path: "scripts/nonexistent.sh", Trigger: "always"},
+		},
+	}
+	state := &prompt.State{
+		Data:         make(map[string]any),
+		ScriptHashes: make(map[string]string),
+	}
+
+	eng, err := New(cfg, state, sourceDir, false)
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	err = eng.runScripts()
+	if err == nil {
+		t.Fatal("expected error for missing script")
+	}
+	if !strings.Contains(err.Error(), "script") {
+		t.Errorf("error = %q, should mention script", err)
+	}
+}
+
+// ─── recordManifest — edge cases ────────────────────────────────────────────
+
+func TestRecordManifestDestRoot(t *testing.T) {
+	sourceDir := t.TempDir()
+
+	cfg := &config.Config{
+		Dest:  "/",
+		Shell: "bash",
+	}
+	state := &prompt.State{
+		Data:         make(map[string]any),
+		ScriptHashes: make(map[string]string),
+	}
+
+	eng, err := New(cfg, state, sourceDir, false)
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	// Should not panic with dest = "/".
+	eng.recordManifest([]string{"/etc/test.conf"})
+}
+
+func TestRecordManifestStatError(t *testing.T) {
+	sourceDir := t.TempDir()
+	destDir := t.TempDir()
+
+	cfg := &config.Config{
+		Dest:  destDir,
+		Shell: "bash",
+	}
+	state := &prompt.State{
+		Data:         make(map[string]any),
+		ScriptHashes: make(map[string]string),
+	}
+
+	eng, err := New(cfg, state, sourceDir, false)
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	// Pass nonexistent path — should log warning but not panic.
+	eng.recordManifest([]string{filepath.Join(destDir, "nonexistent")})
+}
+
+// ─── applySymlinks — error path: invalid template target ────────────────────
+
+func TestApplySymlinksInvalidTemplate(t *testing.T) {
+	sourceDir := t.TempDir()
+	destDir := t.TempDir()
+
+	cfg := &config.Config{
+		Dest:  destDir,
+		Shell: "bash",
+		Symlinks: map[string]string{
+			"config": "{{ .missing_key }}",
+		},
+	}
+	state := &prompt.State{
+		Data:         make(map[string]any),
+		ScriptHashes: make(map[string]string),
+	}
+
+	eng, err := New(cfg, state, sourceDir, false)
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	err = eng.applySymlinks()
+	if err == nil {
+		t.Fatal("expected error for invalid template target")
+	}
+	if !strings.Contains(err.Error(), "symlink") {
+		t.Errorf("error = %q, should mention symlink", err)
+	}
+}
+
+// ─── New — error paths ──────────────────────────────────────────────────────
+
+func TestNewBuildDataError(t *testing.T) {
+	sourceDir := "\x00invalid" // NUL byte in path — invalid on most systems.
+	cfg := &config.Config{
+		Dest:  "/tmp",
+		Shell: "bash",
+	}
+	state := &prompt.State{
+		Data:         make(map[string]any),
+		ScriptHashes: make(map[string]string),
+	}
+
+	_, err := New(cfg, state, sourceDir, false)
+	if err == nil {
+		t.Error("expected error for invalid sourceDir")
+	}
+}
+
+func TestNewLoadIgnoreError(t *testing.T) {
+	sourceDir := t.TempDir()
+	destDir := t.TempDir()
+
+	// Create invalid ignore.tmpl.
+	os.WriteFile(filepath.Join(sourceDir, "ignore.tmpl"), []byte("{{ invalid }}"), 0o644)
+
+	cfg := &config.Config{
+		Dest:  destDir,
+		Shell: "bash",
+	}
+	state := &prompt.State{
+		Data:         make(map[string]any),
+		ScriptHashes: make(map[string]string),
+	}
+
+	_, err := New(cfg, state, sourceDir, false)
+	if err == nil {
+		t.Fatal("expected error for invalid ignore.tmpl")
+	}
+	if !strings.Contains(err.Error(), "ignore") {
+		t.Errorf("error = %q, should mention ignore", err)
+	}
+}

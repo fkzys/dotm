@@ -3,6 +3,7 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"dotm/internal/config"
@@ -387,4 +388,262 @@ func TestPrintReportWithPkgs(t *testing.T) {
 		PkgOrSvcPrinted: true,
 	}
 	PrintReport(report, false, ScopeAll)
+}
+
+// ─── Status with symlink in config ──────────────────────────────────────────
+
+func TestStatusSymlinkMissing(t *testing.T) {
+	sourceDir, _, state := setupStatusTest(t)
+
+	// Add a symlink to config that doesn't exist in dest.
+	cfg, err := config.Load(filepath.Join(sourceDir, "dotm.toml"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Symlinks = map[string]string{"mylink": "/some/target"}
+
+	eng, err := New(cfg, state, sourceDir, false)
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	report, err := eng.Status(ScopeFiles, false)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	entry := findEntry(report, "mylink")
+	if entry == nil {
+		t.Fatal("expected entry for symlink mylink")
+	}
+	if entry.Status != StatusMissing {
+		t.Errorf("expected missing for symlink, got %s", FormatStatus(entry.Status))
+	}
+}
+
+func TestStatusSymlinkExists(t *testing.T) {
+	sourceDir, destDir, state := setupStatusTest(t)
+
+	// Create the symlink in dest.
+	linkPath := filepath.Join(destDir, "mylink")
+	os.Symlink("/some/target", linkPath)
+
+	cfg, err := config.Load(filepath.Join(sourceDir, "dotm.toml"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Symlinks = map[string]string{"mylink": "/some/target"}
+
+	eng, err := New(cfg, state, sourceDir, false)
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	report, err := eng.Status(ScopeFiles, false)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	entry := findEntry(report, "mylink")
+	if entry == nil {
+		t.Fatal("expected entry for symlink mylink")
+	}
+	if entry.Status != StatusClean {
+		t.Errorf("expected clean for symlink, got %s", FormatStatus(entry.Status))
+	}
+}
+
+func TestStatusSymlinkSkippedIfInSource(t *testing.T) {
+	sourceDir, _, state := setupStatusTest(t)
+
+	// Create a source file that matches symlink path.
+	writeSourceFile(t, sourceDir, "mylink", "content")
+
+	cfg, err := config.Load(filepath.Join(sourceDir, "dotm.toml"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Symlinks = map[string]string{"mylink": "/some/target"}
+
+	eng, err := New(cfg, state, sourceDir, false)
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	report, err := eng.Status(ScopeFiles, false)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	// Should only have one entry (from source file, not symlink).
+	count := 0
+	for _, e := range report.Entries {
+		if e.RelPath == "mylink" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected 1 entry for mylink, got %d", count)
+	}
+}
+
+// ─── Status with orphan symlinks and directories ────────────────────────────
+
+func TestStatusOrphanSymlink(t *testing.T) {
+	sourceDir, destDir, state := setupStatusTest(t)
+
+	// Create symlink in dest.
+	linkPath := filepath.Join(destDir, "oldlink")
+	os.Symlink("/old/target", linkPath)
+
+	// Add to manifest.
+	state.Manifest.Symlinks = []string{"oldlink"}
+
+	eng := buildEngine(t, sourceDir, destDir, state)
+	report, err := eng.Status(ScopeFiles, false)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	entry := findEntry(report, "oldlink")
+	if entry == nil {
+		t.Fatal("expected entry for orphan symlink oldlink")
+	}
+	if entry.Status != StatusOrphan {
+		t.Errorf("expected orphan for symlink, got %s", FormatStatus(entry.Status))
+	}
+}
+
+func TestStatusOrphanDirectory(t *testing.T) {
+	sourceDir, destDir, state := setupStatusTest(t)
+
+	// Create directory in dest.
+	dirPath := filepath.Join(destDir, "olddir")
+	os.MkdirAll(dirPath, 0o755)
+
+	// Add to manifest.
+	state.Manifest.Directories = []string{"olddir"}
+
+	eng := buildEngine(t, sourceDir, destDir, state)
+	report, err := eng.Status(ScopeFiles, false)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	entry := findEntry(report, "olddir")
+	if entry == nil {
+		t.Fatal("expected entry for orphan directory olddir")
+	}
+	if entry.Status != StatusOrphan {
+		t.Errorf("expected orphan for directory, got %s", FormatStatus(entry.Status))
+	}
+}
+
+func TestStatusOrphanDirectoryNotInDest(t *testing.T) {
+	sourceDir, destDir, state := setupStatusTest(t)
+
+	// Don't create directory in dest.
+	state.Manifest.Directories = []string{"gonedir"}
+
+	eng := buildEngine(t, sourceDir, destDir, state)
+	report, err := eng.Status(ScopeFiles, false)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	entry := findEntry(report, "gonedir")
+	if entry != nil {
+		t.Error("expected no entry for orphan directory not in dest")
+	}
+}
+
+// ─── Status with template rendering error ───────────────────────────────────
+
+func TestStatusTemplateRenderError(t *testing.T) {
+	sourceDir, destDir, state := setupStatusTest(t)
+
+	// Source has template with missing key.
+	writeSourceFile(t, sourceDir, "bad.txt.tmpl", "hello {{ .undefinedKey }}")
+	// Create dest file so Status reaches the template render step
+	// (without it, Status returns Missing before rendering).
+	os.WriteFile(filepath.Join(destDir, "bad.txt"), []byte("existing dest"), 0o644)
+
+	eng := buildEngine(t, sourceDir, destDir, state)
+	report, err := eng.Status(ScopeFiles, false)
+	// Status should return an error when template rendering fails.
+	if err == nil {
+		t.Error("expected error for template with missing key")
+	} else if !strings.Contains(err.Error(), "undefinedKey") && !strings.Contains(err.Error(), "render") {
+		t.Errorf("expected template error, got: %v", err)
+	}
+	_ = report
+}
+
+// ─── Status collectSourcePaths with ignore ───────────────────────────────────
+
+func TestStatusCollectSourcePathsIgnoresDirectory(t *testing.T) {
+	sourceDir, destDir, state := setupStatusTest(t)
+
+	// Create files in a directory.
+	writeSourceFile(t, sourceDir, ".git/config", "git config")
+	writeSourceFile(t, sourceDir, ".git/HEAD", "ref: main")
+	// Also create a non-ignored file to verify it appears.
+	writeSourceFile(t, sourceDir, ".config/app.conf", "app config")
+
+	// Create ignore.tmpl.
+	os.WriteFile(filepath.Join(sourceDir, "ignore.tmpl"), []byte(".git/**\n"), 0o644)
+
+	eng := buildEngine(t, sourceDir, destDir, state)
+	report, err := eng.Status(ScopeFiles, false)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	// .git files should not appear in entries.
+	for _, entry := range report.Entries {
+		if strings.HasPrefix(entry.RelPath, ".git/") {
+			t.Errorf("ignored file %s should not appear in status", entry.RelPath)
+		}
+	}
+
+	// Non-ignored file should appear in entries.
+	found := false
+	for _, entry := range report.Entries {
+		if entry.RelPath == ".config/app.conf" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected .config/app.conf to appear in status entries")
+	}
+}
+
+// ─── Counts edge cases ──────────────────────────────────────────────────────
+
+func TestStatusCountsEmpty(t *testing.T) {
+	report := &StatusReport{}
+	clean, modified, missing, orphan := report.Counts()
+	if clean != 0 || modified != 0 || missing != 0 || orphan != 0 {
+		t.Errorf("expected all zeros, got clean=%d modified=%d missing=%d orphan=%d",
+			clean, modified, missing, orphan)
+	}
+}
+
+func TestStatusHasProblemsPkgSvc(t *testing.T) {
+	report := &StatusReport{
+		Entries:       []StatusEntry{{".config/test.conf", StatusClean}},
+		PkgHasProblems: true,
+	}
+	if !report.HasProblems() {
+		t.Error("expected HasProblems=true when PkgHasProblems")
+	}
+
+	report = &StatusReport{
+		Entries:      []StatusEntry{{".config/test.conf", StatusClean}},
+		SvcHasProblems: true,
+	}
+	if !report.HasProblems() {
+		t.Error("expected HasProblems=true when SvcHasProblems")
+	}
 }

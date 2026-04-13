@@ -1,10 +1,12 @@
 package perms
 
 import (
+	"bytes"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -672,5 +674,95 @@ func TestComputeActionsWithRealIsDir(t *testing.T) {
 	// Should have action for the file.
 	if len(actions) != 1 {
 		t.Errorf("expected 1 action, got %d", len(actions))
+	}
+}
+
+// ─── ApplyActions — dry run output verification ─────────────────────────────
+
+func TestApplyDryRunOutput(t *testing.T) {
+	actions := []PermAction{
+		{Path: "/some/file.conf", Mode: 0o644, Owner: "root", Group: "root"},
+		{Path: "/some/dir/", Mode: -1, Owner: "root", Group: "-"},
+		{Path: "/some/other.conf", Mode: -1, Owner: "-", Group: "root"},
+	}
+
+	// Capture output.
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	ok, errs := ApplyActions(actions, true)
+	w.Close()
+
+	if !ok {
+		t.Fatalf("dry run should succeed: %v", errs)
+	}
+
+	// Read captured output.
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+
+	// Verify output contains expected values.
+	if !strings.Contains(output, "0644") {
+		t.Error("expected mode 0644 in dry run output")
+	}
+	if !strings.Contains(output, "root:root") {
+		t.Error("expected root:root in dry run output")
+	}
+	if !strings.Contains(output, "-:root") {
+		t.Error("expected -:root in dry run output")
+	}
+	if !strings.Contains(output, "root:-") {
+		t.Error("expected root:- in dry run output")
+	}
+}
+
+// ─── ApplyActions — chown with both owner and group ─────────────────────────
+
+func TestApplyChownBothOwnerAndGroup(t *testing.T) {
+	skipIfNotRoot(t)
+	f := filepath.Join(t.TempDir(), "test")
+	os.WriteFile(f, []byte(""), 0o644)
+
+	ok, errs := ApplyActions([]PermAction{makeAction(f, -1, "root", "root")}, false)
+	if !ok {
+		t.Fatalf("errors: %v", errs)
+	}
+	uid, gid := fileStat(t, f)
+	assertEqual(t, "uid", uid, 0)
+	assertEqual(t, "gid", gid, 0)
+}
+
+// ─── ApplyActions — mode parsing edge cases ─────────────────────────────────
+
+func TestComputeActionsInvalidModeParsing(t *testing.T) {
+	// Rule with invalid mode (not octal) — should still compute actions
+	// but Mode should be -1 after parsing fails.
+	rules := []PermRule{
+		{
+			Pattern: "**",
+			DirOnly: false,
+			Mode:    "9999", // invalid octal but ParseRules would reject this
+			Owner:   "root",
+			Group:   "root",
+		},
+	}
+
+	// Manually create rule with invalid mode to test ComputeActions parsing.
+	rules[0].Mode = "invalid"
+	actions := ComputeActions(rules, []string{"/some/file"}, "/",
+		func(_ string) bool { return false })
+
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	// Mode should be -1 since "invalid" can't be parsed as octal.
+	if actions[0].Mode != -1 {
+		t.Errorf("expected mode -1 for invalid mode string, got %d", actions[0].Mode)
 	}
 }

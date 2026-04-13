@@ -317,3 +317,37 @@ func TestFuncDefaultChainedIndexMissing(t *testing.T) {
 		t.Errorf("got %q, want 'fallback'", out)
 	}
 }
+
+func TestFuncDefaultWithInt64(t *testing.T) {
+	// TOML decodes integers as int64.
+	data := map[string]any{"key": int64(42)}
+	out, err := Render(`{{ .key | default 0 }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "42" {
+		t.Errorf("got %q, want '42'", out)
+	}
+}
+
+func TestFuncDefaultWithFloat64(t *testing.T) {
+	data := map[string]any{"key": float64(3.14)}
+	out, err := Render(`{{ .key | default 0.0 }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "3.14" {
+		t.Errorf("got %q, want '3.14'", out)
+	}
+}
+
+func TestFuncDefaultWithNonEmptyMap(t *testing.T) {
+	data := map[string]any{"key": map[string]any{"a": 1}}
+	out, err := Render(`{{ .key | default "fallback" }}`, "test", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "map[a:1]" {
+		t.Errorf("got %q, want 'map[a:1]'", out)
+	}
+}

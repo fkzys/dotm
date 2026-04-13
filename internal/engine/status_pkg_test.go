@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,11 +16,14 @@ import (
 
 func captureStdout(fn func()) string {
 	old := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		panic(fmt.Sprintf("pipe: %v", err))
+	}
 	os.Stdout = w
+	defer func() { os.Stdout = old }()
 	fn()
 	w.Close()
-	os.Stdout = old
 	var buf bytes.Buffer
 	io.Copy(&buf, r)
 	return buf.String()
@@ -27,11 +31,14 @@ func captureStdout(fn func()) string {
 
 func captureStderr(fn func()) string {
 	old := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		panic(fmt.Sprintf("pipe: %v", err))
+	}
 	os.Stderr = w
+	defer func() { os.Stderr = old }()
 	fn()
 	w.Close()
-	os.Stderr = old
 	var buf bytes.Buffer
 	io.Copy(&buf, r)
 	return buf.String()
