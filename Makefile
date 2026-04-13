@@ -1,4 +1,4 @@
-.PHONY: build install uninstall test test-root clean man
+.PHONY: build install uninstall test test-root clean man lint
 
 PREFIX   = /usr
 DESTDIR  =
@@ -24,6 +24,9 @@ test:
 
 test-root:
 	sudo go test ./internal/perms/ -v -count=1
+
+lint:
+	golangci-lint run ./...
 
 man: $(MANPAGES)
 
