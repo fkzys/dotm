@@ -330,6 +330,36 @@ services = ["hypridle", "waybar", "mpd"]
 
 Package and service names may contain Go template expressions. If a name renders to an empty string, the entry is skipped.
 
+### Conditional packages and services
+
+Package ande service names may include Go template expressions. If a rendered name is empty, it's skipped.
+
+**Option 1: Inline conditionals per package:**
+```toml
+[pacman]
+packages = [
+    "hyprland",
+    "{{ if .laptop }}brightnessctl{{ end }}",
+    "{{ if .laptop }}tpm2-tss{{ end }}",
+    "{{ if .laptop }}bluez{{ end }}",
+]
+```
+
+**Option 2: Multi-line block with one condition:**
+```toml
+[pacman]
+packages = [
+    "hyprland",
+    """
+    {{ if .laptop }}
+    brightnessctl
+    tpm2-tss
+    bluez
+    {{ end }}
+    """
+]
+```
+
 ### How it works
 
 1. `dotm apply pkgs` reads the config and loads the previous manifest
