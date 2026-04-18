@@ -274,6 +274,31 @@ services = ["firewalld", "sshd"]
 Package and service names may contain Go template expressions. If a name
 renders to an empty string, the entry is skipped.
 
+**Inline conditionals:**
+
+```toml
+[pacman]
+packages = [
+    "git",
+    "{{ if .laptop }}brightnessctl{{ end }}",
+]
+```
+
+**Multi-line block with one condition:**
+
+```toml
+[pacman]
+packages = [
+    "git",
+    """
+    {{ if .laptop }}
+    brightnessctl
+    tpm2-tss
+    {{ end }}
+    """
+]
+```
+
 Template variables for commands:
 - **{{.Name}}** — raw package/service name
 - In check/install/remove/enable/disable: **{{.Name}}** is shell-quoted
