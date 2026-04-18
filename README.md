@@ -322,9 +322,9 @@ install = "sudo gitpkg install {{.Name}}"
 remove  = "sudo gitpkg remove {{.Name}}"
 
 [managers.npm]
-check   = "pkg={{.Name}}; pkg=${pkg%@*}; test -d $(npm root -g)/$pkg"
-install = "npm install -g {{.Name}}"
-remove  = "npm uninstall -g {{.Name}}"
+check   = "pkg={{.Name}}; pkg=${pkg%@*}; test -d ~/.npm-global/lib/node_modules/$pkg"
+install = "npm install -g --prefix ~/.npm-global {{.Name}}"
+remove  = "npm uninstall -g --prefix ~/.npm-global {{.Name}}"
 
 [pacman]
 packages = [
