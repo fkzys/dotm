@@ -311,6 +311,21 @@ check   = "systemctl --user is-enabled {{.Name}}"
 enable  = "systemctl --user enable {{.Name}}"
 disable = "systemctl --user disable {{.Name}}"
 
+[managers.flatpak]
+check   = "flatpak info '{{.Name}}' >/dev/null 2>&1"
+install = "flatpak install -y --noninteractive {{.Name}}"
+remove  = "flatpak uninstall -y --noninteractive {{.Name}}"
+
+[managers.gitpkg]
+check   = "gitpkg list 2>/dev/null | grep -q '^{{.Name}} '"
+install = "sudo gitpkg install {{.Name}}"
+remove  = "sudo gitpkg remove {{.Name}}"
+
+[managers.npm]
+check   = "pkg={{.Name}}; pkg=${pkg%@*}; test -d $(npm root -g)/$pkg"
+install = "npm install -g {{.Name}}"
+remove  = "npm uninstall -g {{.Name}}"
+
 [pacman]
 packages = [
     "hyprland",
@@ -319,13 +334,35 @@ packages = [
 ]
 
 [aur]
-packages = ["kopia-bin", "coolercontrol-bin"]
+packages = [
+    "kopia-bin",
+    "coolercontrol-bin",
+]
 
 [systemd]
 services = ["firewalld", "systemd-oomd"]
 
 [systemd-user]
 services = ["hypridle", "waybar", "mpd"]
+
+[flatpak]
+packages = [
+    "org.mozilla.firefox",
+    "org.telegram.desktop",
+    "{{ if .portproton }}ru.linux_gaming.PortProton{{ end }}",
+]
+
+[gitpkg]
+packages = [
+    "verify-lib",
+    "bwrap-common",
+    "hardened_malloc",
+]
+
+[npm]
+packages = [
+    "@qwen-code/qwen-code@latest",
+]
 ```
 
 Package and service names may contain Go template expressions. If a name renders to an empty string, the entry is skipped.
