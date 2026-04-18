@@ -39,7 +39,7 @@ The repo is the single source of truth. `apply` is a one-directional push. No bi
 | **Permissions** | First-class `perms` file with glob patterns | Limited (encoded in filename prefixes) |
 | **`dest = "/"`** | First-class support, works out of the box | Needs workarounds |
 | **Packages** | Declarative, zero hardcoded managers | Via external tools |
-| **Complexity** | ~3k LOC | ~50k LOC |
+| **Complexity** | ~4k LOC | ~50k LOC |
 
 ## Installation
 
