@@ -1,8 +1,8 @@
 # dotm
 
-[![CI](https://github.com/rpPH4kQocMjkm2Ve/dotm/actions/workflows/ci.yml/badge.svg)](https://github.com/rpPH4kQocMjkm2Ve/dotm/actions/workflows/ci.yml)
-![License](https://img.shields.io/github/license/rpPH4kQocMjkm2Ve/dotm)
-[![Spec](https://img.shields.io/endpoint?url=https://gitlab.com/fkzys/specs/-/raw/main/version.json&maxAge=300)](https://gitlab.com/fkzys/specs)
+[![CI](https://github.com/fkzys/dotm/actions/workflows/ci.yml/badge.svg)](https://github.com/fkzys/dotm/actions/workflows/ci.yml)
+![License](https://img.shields.io/github/license/fkzys/dotm)
+[![Spec](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/fkzys/specs/refs/heads/main/version.json&maxAge=300)](https://github.com/fkzys/specs)
 
 Declarative dotfiles, packages, and services manager. Lightweight chezmoi alternative with normal file paths, delegated encryption, proper permission management, and first-class support for `dest = "/"`.
 
@@ -49,7 +49,7 @@ The repo is the single source of truth. `apply` is a one-directional push. No bi
 yay -S dotm
 ```
 
-### [gitpkg](https://gitlab.com/fkzys/gitpkg)
+### [gitpkg](https://github.com/fkzys/gitpkg)
 ```bash
 gitpkg install dotm
 ```
@@ -57,7 +57,7 @@ gitpkg install dotm
 ### Manual
 
 ```bash
-git clone https://gitlab.com/fkzys/dotm.git
+git clone https://github.com/fkzys/dotm.git
 cd dotm
 sudo make install
 ```
