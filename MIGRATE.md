@@ -2,7 +2,9 @@
 
 ## Overview
 
-dotm uses normal file paths instead of chezmoi's encoded prefixes (`dot_`, `executable_`, `private_`, `symlink_`). Templates use the same Go `text/template` engine with a slightly different variable namespace. Permissions are managed via a dedicated `perms` file instead of filename prefixes. Symlinks and scripts are declared in `dotm.toml`.
+dotm uses normal file paths instead of chezmoi's encoded prefixes (`dot_`, `executable_`, `private_`, `symlink_`).\
+Templates use the same Go `text/template` engine with a slightly different variable namespace.\
+Permissions are managed via a dedicated `perms` file instead of filename prefixes. Symlinks and scripts are declared in `dotm.toml`.
 
 ## Conceptual mapping
 
@@ -80,25 +82,25 @@ Example transformations:
 
 ```
 dot_config/hypr/hyprland.conf.tmpl
-  → files/.config/hypr/hyprland.conf.tmpl
+  -> files/.config/hypr/hyprland.conf.tmpl
 
 dot_config/hypr/scripts/executable_lock.sh
-  → files/.config/hypr/scripts/lock.sh
+  -> files/.config/hypr/scripts/lock.sh
 
 private_dot_ssh/config
-  → files/.ssh/config
+  -> files/.ssh/config
 
 dot_config/private_fcitx5/private_conf/private_classicui.conf
-  → files/.config/fcitx5/conf/classicui.conf
+  -> files/.config/fcitx5/conf/classicui.conf
 
 dot_local/bin/executable_anki.tmpl
-  → files/.local/bin/anki.tmpl
+  -> files/.local/bin/anki.tmpl
 
 dot_local/bin/symlink_imv-dir.tmpl
-  → [symlinks] entry in dotm.toml (not a file)
+  -> [symlinks] entry in dotm.toml (not a file)
 
 executable_literal_run_sing-box.sh.tmpl
-  → files/run_sing-box.sh.tmpl
+  -> files/run_sing-box.sh.tmpl
 ```
 
 Automated conversion script:
@@ -159,7 +161,8 @@ No other template changes are needed. All `output`, `fromYaml`, `joinPath`, `has
 
 ### 4. Convert symlink_ files to [symlinks]
 
-In chezmoi, `symlink_` files contain the symlink target as template content. In dotm, symlinks are declared in `dotm.toml`:
+In chezmoi, `symlink_` files contain the symlink target as template content.\
+In dotm, symlinks are declared in `dotm.toml`:
 
 **chezmoi** — `dot_local/bin/symlink_imv-dir.tmpl`:
 ```
@@ -186,7 +189,6 @@ run_onchange_after_enable_services.sh.tmpl
 dotm uses `[[scripts]]` entries in `dotm.toml` with explicit trigger configuration:
 
 ```bash
-# Copy scripts to scripts/ directory
 cp "$OLD/run_onchange_install_packages.sh.tmpl" "$NEW/scripts/install_packages.sh.tmpl"
 cp "$OLD/run_onchange_after_enable_services.sh.tmpl" "$NEW/scripts/enable_services.sh.tmpl"
 ```
@@ -261,7 +263,8 @@ README.md
 {{ end -}}
 ```
 
-Key difference: dotm uses `**` for recursive directory matching. Single filenames match exactly. chezmoi's ignore patterns and dotm's patterns both support `*`, `?`, and `**`.
+Key difference: dotm uses `**` for recursive directory matching.\
+Single filenames match exactly. chezmoi's ignore patterns and dotm's patterns both support `*`, `?`, and `**`.
 
 ### 8. Create the perms file
 
@@ -294,7 +297,8 @@ run_sing-box.sh                           0755  -      -
 .local/share/flatpak/**                   0600  -      -
 ```
 
-Rules format: `<glob-pattern> <mode|-> <owner|-> <group|->`. Trailing `/` means directories only, no trailing `/` means files only. Last matching rule wins. `-` means don't change that attribute.
+Rules format: `<glob-pattern> <mode|-> <owner|-> <group|->`.\
+Trailing `/` means directories only, no trailing `/` means files only. Last matching rule wins. `-` means don't change that attribute.
 
 ### 9. Handle encryption
 
@@ -307,7 +311,7 @@ encryption = "age"
     recipients = ["age1..."]
 ```
 
-dotm has no built-in encryption. If your templates already use `output "sops" "-d" ...` for secrets (as in the example), no changes are needed — sops handles decryption at template render time:
+dotm has no built-in encryption. If your templates already use `output "sops" "-d" ...` for secrets (as in the example), no changes are needed, sops handles decryption at template render time:
 
 ```
 {{ $s := output "sops" "-d" (joinPath .sourceDir "secrets.enc.yaml") | fromYaml -}}
@@ -316,19 +320,9 @@ dotm has no built-in encryption. If your templates already use `output "sops" "-
 
 Copy `secrets.enc.yaml` and `.sops.yaml` to the new repo root. Ensure `SOPS_AGE_KEY_FILE` is set in your shell environment.
 
-If you used chezmoi's built-in encryption for individual files (not sops), convert them to sops-managed templates or decrypt and store as plain files.
+If you used chezmoi's built-in encryption for individual files, adapt them yourself.
 
-### 10. Remove chezmoi-specific files
-
-Delete any chezmoi-only artifacts from the new repo:
-
-```bash
-# Remove chezmoi nvim plugin (if present)
-rm -f "$NEW/files/.config/nvim/lua/plugins/chezmoi.lua"
-
-# Remove empty directories (git/dotm don't track them)
-find "$NEW/files" -type d -empty -delete
-```
+### 10. Empty dirs
 
 If empty directories are needed at the destination, create them via a script:
 
@@ -341,7 +335,7 @@ trigger = "always"
 ```
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
 # scripts/create_dirs.sh
 mkdir -p ~/.config/qt5ct/{colors,qss}
 mkdir -p ~/.config/qt6ct/{colors,qss}
@@ -392,10 +386,10 @@ git init && git add -A && git commit -m "migrate from chezmoi to dotm"
 # Answer prompts and create state
 dotm init
 
-# Dry run — inspect what would happen
+# Dry run
 dotm apply -n
 
-# Check the output carefully, then apply
+# Check the output, then apply
 dotm apply
 
 # Verify everything matches
@@ -410,8 +404,8 @@ dotm diff
 ├── dotm.toml                    # config (was .chezmoi.toml.tmpl)
 ├── perms                        # permissions (was executable_/private_ prefixes)
 ├── ignore.tmpl                  # ignore patterns (was .chezmoiignore)
-├── secrets.enc.yaml             # sops-encrypted secrets (unchanged)
-├── .sops.yaml                   # sops config (unchanged)
+├── secrets.enc.yaml             # sops-encrypted secrets
+├── .sops.yaml                   # sops config
 ├── files/                       # dotfiles with real paths
 │   ├── .bashrc                  # was dot_bashrc
 │   ├── .zshrc.tmpl              # was dot_zshrc.tmpl
